@@ -1,3 +1,10 @@
 settings.py
-*.pyc
+
+# Other
 .idea
+*.gz
+*.keys
+*.pyc
+*.log
+*.csv
+*.logs*
