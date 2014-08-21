@@ -1,9 +1,12 @@
-import urllib, urllib2
+import urllib
+import urllib2
 from time import sleep
 import json
-import constants
+
 
 # https://www.bitmex.com/api/explorer/
+from marketmaker.bitmex import constants
+
 
 class BitMEX(object):
     def __init__(self, base_url=None, symbol=None, login=None, password=None):
