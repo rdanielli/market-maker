@@ -1,18 +1,28 @@
-import abc
 from abc import abstractmethod, ABCMeta
 
-class BaseBroker(object):
-    """ Base class for brokers.
+from marketmaker import observer
+
+class BaseBroker(observer.Subject):
+    """Base class for brokers.
 
     .. note::
 
-        This is a base class and should not be used directly
+        This is a base class and should not be used directly.
     """
 
     __metaclass__ = ABCMeta
 
     def __init__(self):
-        pass
+        self.__orderEvent = observer.Event()
+
+    def notifyOrderEvent(self, orderEvent):
+        self.__orderEvent.emit(self, orderEvent)
+
+    # Handlers should expect 2 parameters:
+    # 1: broker instance
+    # 2: OrderEvent instance
+    def getOrderUpdatedEvent(self):
+        return self.__orderEvent
 
     @abstractmethod
     def getCash(self, includeShort=True):
@@ -147,5 +157,3 @@ class BaseBroker(object):
         :type order: :class:`Order`.
         """
         raise NotImplementedError()
-
-

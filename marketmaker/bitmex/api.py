@@ -3,9 +3,8 @@ import urllib2
 from time import sleep
 import json
 
-
 # https://www.bitmex.com/api/explorer/
-from marketmaker import constants
+from marketmaker.bitmex import constants
 
 
 class BitMEX(object):
@@ -16,7 +15,7 @@ class BitMEX(object):
         self.login = login
         self.password = password
 
-# Public methods
+    # Public methods
     def ticker_data(self):
         """Get ticker data"""
         data = self.get_instrument()
@@ -63,7 +62,7 @@ class BitMEX(object):
             'size_ask': order_book[0]['askSize']
         }
 
-# Authentication required methods
+    # Authentication required methods
     def authenticate(self):
         """Set BitMEX authentication information"""
         loginResponse = self._curl_bitmex(api="user/login", postdict={'email': self.login, 'password': self.password})

@@ -1,15 +1,14 @@
-
-from marketmaker.exchangeinterface import ExchangeInterface
+from marketmaker.bitmex import broker
 from marketmaker.ordermanager import OrderManager
-from marketmaker.bitmex import settings, constants
 
 
-print 'Version: %s\n' % constants.VERSION
+
+exchange = broker.BrokerInterface()
+
+om = OrderManager(exchange)
 
 
-interface = ExchangeInterface(dry_run=True, settings=settings)
+om.exit()
 
-
-om = OrderManager(settings, interface)
-om.run_loop()
+#om.run_loop()
 

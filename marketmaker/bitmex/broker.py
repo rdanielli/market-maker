@@ -1,175 +1,93 @@
-import urllib
-import urllib2
+from marketmaker.bitmex import api
+from marketmaker.bitmex import settings
+from marketmaker.utils import dt
+
 from time import sleep
-import json
+import sys
+from urllib2 import URLError
 
 
-# https://www.bitmex.com/api/explorer/
-from marketmaker.bitmex import constants
+class BrokerInterface:
+    def __init__(self):
+        self.__settings = self.getSettings()
+        self.__dryRun = self.__settings.DRY_RUN
+        self.__symbol = sys.argv[1] if len(sys.argv) > 1 else self.__settings.SYMBOL
+        self.__api = api.BitMEX(base_url=self.__settings.BASE_URL, symbol=self.__symbol, login=self.__settings.LOGIN, password=self.__settings.PASSWORD)
 
 
-class BitMEX(object):
-    def __init__(self, base_url=None, symbol=None, login=None, password=None):
-        self.base_url = base_url
-        self.symbol = symbol
-        self.token = None
-        self.login = login
-        self.password = password
+    def getSettings(self):
+        return settings
 
-# Public methods
-    def ticker_data(self):
-        """Get ticker data"""
-        data = self.get_instrument()
-        return {
-            "last": data['lastPrice'],
-            "buy": data['bidPrice'],
-            "sell": data['askPrice']
-        }
+    def authenticate(self):
+        if not self.__dryRun:
+            self.__api.authenticate()
+
+    def cancel_all_orders(self):
+        if self.__dryRun:
+            return
+
+        print "Resetting current position. Cancelling all existing orders."
+
+        trade_data = self.__api.open_orders()
+        sleep(1)
+        orders = trade_data
+
+        for order in orders:
+            print dt.timestamp_to_string(), "Cancelling:", order['side'], order['orderQty'], "@", order['price']
+            while True:
+                try:
+                    self.__api.cancel(order['orderID'])
+                    sleep(1)
+                except URLError as e:
+                    print e.reason
+                    sleep(10)
+                except ValueError as e:
+                    print e
+                    sleep(10)
+                else:
+                    break
 
     def get_instrument(self):
-        """Get an instrument's details"""
-        api = "instrument"
-        return self._curl_bitmex(api=api, query={'filter': json.dumps({'symbol': self.symbol})})[0]
+        return self.__api.get_instrument()
 
-    def market_depth(self):
-        """Get market depth / orderbook"""
-        api = "orderBook"
-        return self._curl_bitmex(api=api, query={'symbol': self.symbol})
+    def get_ticker(self):
+        ticker = self.__api.ticker_data()
 
-    def recent_trades(self):
-        """Get recent trades
+        if ticker["buy"] is not None:
+            return {"last": float(ticker["last"]), "buy": float(ticker["buy"]), "sell": float(ticker["sell"]), "symbol": self.__symbol}
+        raise Exception("Contract is not traded anymore. Update to current contract.")
 
-           Returns
-           -------
-           A list of dicts:
-                 {u'amount': 60,
-                  u'date': 1306775375,
-                  u'price': 8.7401099999999996,
-                  u'tid': u'93842'},
-
-        """
-
-        api = "trade/getRecent"
-        return self._curl_bitmex(api=api)
-
-    @property
-    def snapshot(self):
-        """Get current BBO"""
-        order_book = self.market_depth()
-        return {
-            'bid': order_book[0]['bidPrice'],
-            'ask': order_book[0]['askPrice'],
-            'size_bid': order_book[0]['bidSize'],
-            'size_ask': order_book[0]['askSize']
-        }
-
-# Authentication required methods
-    def authenticate(self):
-        """Set BitMEX authentication information"""
-        loginResponse = self._curl_bitmex(api="user/login", postdict={'email': self.login, 'password': self.password})
-        self.token = loginResponse['id']
-
-    def authentication_required(function):
-        def wrapped(self, *args, **kwargs):
-            if not (self.token):
-                msg = "You must be authenticated to use this method"
-                raise Exception, msg
-            else:
-                return function(self, *args, **kwargs)
-        return wrapped
-
-    @authentication_required
-    def funds(self):
-        """Get your current balance."""
-        userResponse = self._curl_bitmex(api="user")
-        return userResponse['margin']['marginBalance'] / float(constants.XBt_TO_XBT) # XBT, not XBt
-
-    @authentication_required
-    def buy(self, quantity, price):
-        """Place a buy order.
-
-        Returns order object. ID: orderID
-
-        """
-
-        return self.place_order(quantity, price)
-
-    @authentication_required
-    def sell(self, quantity, price):
-        """Place a sell order.
-
-        Returns order object. ID: orderID
-
-        """
-
-        return self.place_order(-quantity, price)
-
-    @authentication_required
-    def place_order(self, quantity, price):
-        """Place an order."""
-
-        if price < 0:
-            raise Exception("Price must be positive.")
-
-        endpoint = "order/new"
-        postdict = {
-            'symbol': self.symbol,
-            'quantity': quantity,
-            'price': price
-        }
-        print postdict
-        return self._curl_bitmex(api=endpoint, postdict=postdict)
-
-    @authentication_required
-    def open_orders(self):
-        """Get open orders."""
-
-        api = "order/myOrders"
-        return self._curl_bitmex(api=api, query={'filter': json.dumps({'ordStatus.isTerminated': False, 'symbol': self.symbol})})
-
-    @authentication_required
-    def cancel(self, orderID):
-        """Cancel an existing order.
-           orderID: Order ID
-        """
-
-        api = "order/cancel"
-        postdict = {
-            'orderID': orderID,
-        }
-        return self._curl_bitmex(api=api, postdict=postdict)
-
-
-    def _curl_bitmex(self, api, query=None, postdict=None, timeout=8):
-        url = self.base_url + api
-        if query:
-            url = url + "?" + urllib.urlencode(query)
-        if postdict:
-            postdata = urllib.urlencode(postdict)
-            request = urllib2.Request(url, postdata)
+    def get_trade_data(self):
+        if self.__dryRun:
+            xbt = float(self.__settings.DRY_BTC)
+            orders = []
         else:
-            request = urllib2.Request(url)
+            while True:
+                try:
+                    orders = self.__api.open_orders()
+                    xbt = self.__api.funds()
+                    sleep(1)
+                except URLError as e:
+                    print e.reason
+                    sleep(10)
+                except ValueError as e:
+                    print e
+                    sleep(10)
+                else:
+                    break
 
-        request.add_header('user-agent', 'liquidbot-' + constants.VERSION)
-        if self.token:
-            request.add_header('accessToken', self.token)
+        return {"xbt": xbt, "orders": orders}
 
-        try:
-            response = urllib2.urlopen(request, timeout=timeout)
-        except urllib2.HTTPError, e:
-            # re-auth and re-run this curl on 401
-            if e.code == 401:
-                if self.token == None:
-                    print postdict
-                    print "Login information incorrect, please check and restart."
-                    exit(1)
-                print "Token expired, reauthenticating..."
-                sleep(1)
-                self.authenticate()
-                return self._curl_bitmex(api, query, postdict, timeout)
-            else:
-                print "Unhandled Error:", e
-                print "Endpoint was: " + api
-                exit(1)
-        return json.loads(response.read())
+    def place_order(self, price, quantity, order_type):
+        if self.__settings.DRY_RUN:
+            return {'orderID': 'dry_run_order', 'orderQty': quantity, 'price': price}
 
+        if order_type == "Buy":
+            order = self.__api.buy(quantity, price)
+        elif order_type == "Sell":
+            order = self.__api.sell(quantity, price)
+        else:
+            print "Invalid order type"
+            exit()
+
+        return order

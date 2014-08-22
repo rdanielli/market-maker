@@ -8,9 +8,15 @@ from marketmaker.utils import dt
 
 
 class OrderManager:
-    def __init__(self, settings, exchange):
+    """Class containing the logic for order setting
 
-        self.__settings = settings
+    :param broker: a broker class
+    :type broker: :class:'marketmaker.broker'
+
+    """
+    def __init__(self, broker):
+
+        self.__settings = broker.getSettings()
 
         if self.__settings.DRY_RUN:
             print "Initializing dry run. Orders printed below represent what would be posted to BitMEX."
@@ -18,23 +24,23 @@ class OrderManager:
             print "Order Manager initializing, connecting to BitMEX. Dry run disabled, executing real trades."
 
 
-        self.__exchange = exchange
-        print "Using symbol %s." % self.__exchange.symbol
-        self.__exchange.authenticate()
+        self.__broker = broker
+        print "Using symbol %s." % self.__settings.SYMBOL
+        self.__broker.authenticate()
         self.start_time = datetime.now()
-        self.instrument = self.__exchange.get_instrument()
+        self.instrument = self.__broker.get_instrument()
         self.reset()
 
     def exit(self):
-        self.__exchange.cancel_all_orders()
+        self.__broker.cancel_all_orders()
 
     def reset(self):
-        self.__exchange.cancel_all_orders()
+        self.__broker.cancel_all_orders()
         self.orders = {}
 
         ticker = self.get_ticker()
 
-        trade_data = self.__exchange.get_trade_data()
+        trade_data = self.__broker.get_trade_data()
         self.start_xbt = trade_data["xbt"]
         print dt.timestamp_to_string(), "Current XBT Balance: %.6f" % self.start_xbt
 
@@ -54,7 +60,7 @@ class OrderManager:
             exit()
 
     def get_ticker(self):
-        ticker = self.__exchange.get_ticker()
+        ticker = self.__broker.get_ticker()
         midpoint = (ticker["buy"] + ticker["sell"])/2
         self.start_position_buy = midpoint
         self.start_position_sell = midpoint
@@ -71,7 +77,7 @@ class OrderManager:
         quantity = self.__settings.ORDER_SIZE + round(random.uniform(-10,10))
         price = position
 
-        order = self.__exchange.place_order(price, quantity, order_type)
+        order = self.__broker.place_order(price, quantity, order_type)
         print dt.timestamp_to_string(), order_type.capitalize() + ":", quantity, \
             "@", price, "id:", order["orderID"], \
             "value: %.6f XBT" % (self.instrument["multiplier"] * price * quantity / constants.XBt_TO_XBT), \
@@ -80,7 +86,7 @@ class OrderManager:
         self.orders[index] = order
 
     def check_orders(self):
-        trade_data = self.__exchange.get_trade_data()
+        trade_data = self.__broker.get_trade_data()
         self.get_ticker()
         order_ids = [o["orderID"] for o in trade_data["orders"]]
         old_orders = self.orders.copy()
