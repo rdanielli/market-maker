@@ -1,12 +1,15 @@
 from marketmaker.bitmex import broker
-from marketmaker.ordermanager import OrderManager
+from marketmaker import strategy
 
 
 
-exchange = broker.BrokerInterface()
+myBroker = broker.BrokerInterface()
 
-om = OrderManager(exchange)
+om = strategy.OrderStrategy(myBroker)
 
+
+om.reset()
+#om.check_orders()
 
 om.exit()
 

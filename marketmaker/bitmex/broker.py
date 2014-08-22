@@ -1,5 +1,6 @@
-from marketmaker.bitmex import api
+from marketmaker.bitmex import rest
 from marketmaker.bitmex import settings
+from marketmaker.bitmex import constants
 from marketmaker.utils import dt
 
 from time import sleep
@@ -9,14 +10,17 @@ from urllib2 import URLError
 
 class BrokerInterface:
     def __init__(self):
-        self.__settings = self.getSettings()
+        self.__settings = settings
+        self.__constants = constants
         self.__dryRun = self.__settings.DRY_RUN
         self.__symbol = sys.argv[1] if len(sys.argv) > 1 else self.__settings.SYMBOL
-        self.__api = api.BitMEX(base_url=self.__settings.BASE_URL, symbol=self.__symbol, login=self.__settings.LOGIN, password=self.__settings.PASSWORD)
+        self.__api = rest.BitMEX(base_url=self.__settings.BASE_URL, symbol=self.__symbol, login=self.__settings.LOGIN, password=self.__settings.PASSWORD)
 
+    def getConstants(self):
+        return self.__constants
 
     def getSettings(self):
-        return settings
+        return self.__settings
 
     def authenticate(self):
         if not self.__dryRun:
@@ -26,10 +30,10 @@ class BrokerInterface:
         if self.__dryRun:
             return
 
-        print "Resetting current position. Cancelling all existing orders."
+        print "Cancelling all existing orders."
 
         trade_data = self.__api.open_orders()
-        sleep(1)
+        #sleep(1)
         orders = trade_data
 
         for order in orders:
@@ -37,7 +41,7 @@ class BrokerInterface:
             while True:
                 try:
                     self.__api.cancel(order['orderID'])
-                    sleep(1)
+                    #sleep(1)
                 except URLError as e:
                     print e.reason
                     sleep(10)
@@ -47,17 +51,17 @@ class BrokerInterface:
                 else:
                     break
 
-    def get_instrument(self):
+    def getInstrument(self):
         return self.__api.get_instrument()
 
-    def get_ticker(self):
+    def getTicker(self):
         ticker = self.__api.ticker_data()
 
         if ticker["buy"] is not None:
             return {"last": float(ticker["last"]), "buy": float(ticker["buy"]), "sell": float(ticker["sell"]), "symbol": self.__symbol}
         raise Exception("Contract is not traded anymore. Update to current contract.")
 
-    def get_trade_data(self):
+    def getTradeData(self):
         if self.__dryRun:
             xbt = float(self.__settings.DRY_BTC)
             orders = []
